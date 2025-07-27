@@ -8,5 +8,7 @@ pypdf
 faiss-cpu
 openai
 tiktoken
+structlog
+PyMuPDF
 
 #-e .
