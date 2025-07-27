@@ -10,5 +10,6 @@ openai
 tiktoken
 structlog
 PyMuPDF
+langchain_openai
 
 #-e .
