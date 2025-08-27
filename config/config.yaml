@@ -16,7 +16,7 @@ llm:
     temperature: 0
     max_output_tokens: 2048
 
-  google:
+  oepnai:
     provider: "openai"
     model_name: "gpt-4o-mini-2024-07-18"
     temperature: 0
