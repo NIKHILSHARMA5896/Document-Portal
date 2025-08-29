@@ -32,7 +32,7 @@ class FaissManager:
             try:
                 self._meta = json.loads(self.meta_path.read_text(encoding="utf-8")) or {"rows": {}} # load it if alrady there
             except Exception:
-                self._meta = {"rows": {}} # init the empty one if does not exist
+                self._meta = {"rows": {}} # init the empty one if dones not exists
         
 
         self.model_loader = model_loader or ModelLoader()
