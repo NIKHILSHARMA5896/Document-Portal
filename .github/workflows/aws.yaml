@@ -72,7 +72,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -85,136 +85,14 @@ jobs:
           task-definition: ${{ env.ECS_TASK_DEFINITION }}
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ needs.build-and-push.outputs.image }}
-
       - name: Print Rendered Task
         run: cat ${{ steps.render-task.outputs.task-definition }}
-
-      - name: Create or update task role if needed
-        run: |
-          # Check if task role exists, create if not
-          TASK_ROLE_EXISTS=$(aws iam get-role --role-name ecsTaskRole --query 'Role.RoleName' --output text 2>/dev/null || echo "None")
-          
-          if [ "$TASK_ROLE_EXISTS" = "None" ]; then
-            echo "Creating ECS Task Role..."
-            # Create the task role
-            aws iam create-role \
-              --role-name ecsTaskRole \
-              --assume-role-policy-document '{
-                "Version": "2012-10-17",
-                "Statement": [
-                  {
-                    "Effect": "Allow",
-                    "Principal": {
-                      "Service": "ecs-tasks.amazonaws.com"
-                    },
-                    "Action": "sts:AssumeRole"
-                  }
-                ]
-              }'
-            
-            # Attach basic ECS task permissions
-            aws iam attach-role-policy \
-              --role-name ecsTaskRole \
-              --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
-            
-            # Wait for role to be available
-            sleep 10
-          fi
-
-      - name: Update task definition with task role
-        id: update-task-def
-        run: |
-          # Add taskRoleArn to the task definition
-          TASK_ROLE_ARN="arn:aws:iam::637423312037:role/ecsTaskRole"
-          
-          # Read the rendered task definition and add taskRoleArn
-          jq --arg taskRoleArn "$TASK_ROLE_ARN" '. + {taskRoleArn: $taskRoleArn}' \
-            ${{ steps.render-task.outputs.task-definition }} > updated-task-def.json
-          
-          echo "Updated task definition with taskRoleArn:"
-          cat updated-task-def.json
-          echo "updated_task_def=updated-task-def.json" >> $GITHUB_OUTPUT
-
-      - name: Check if ECS Service exists and create if needed
-        id: check-service
-        run: |
-          # Check if service exists
-          SERVICE_EXISTS=$(aws ecs describe-services \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }} \
-            --query 'services[0].serviceName' \
-            --output text 2>/dev/null || echo "None")
-          
-          if [ "$SERVICE_EXISTS" = "None" ] || [ "$SERVICE_EXISTS" = "" ]; then
-            echo "Service doesn't exist, creating it..."
-            
-            # Get default VPC and subnets (you may want to specify your own)
-            VPC_ID=$(aws ec2 describe-vpcs --filters "Name=is-default,Values=true" --query 'Vpcs[0].VpcId' --output text)
-            SUBNET_IDS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --query 'Subnets[0:2].SubnetId' --output text | tr '\t' ',')
-            
-            # Get or create security group
-            SG_ID=$(aws ec2 describe-security-groups \
-              --filters "Name=group-name,Values=document-portal-sg" "Name=vpc-id,Values=$VPC_ID" \
-              --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || echo "None")
-            
-            if [ "$SG_ID" = "None" ] || [ "$SG_ID" = "" ]; then
-              echo "Creating security group..."
-              SG_ID=$(aws ec2 create-security-group \
-                --group-name document-portal-sg \
-                --description "Security group for document portal" \
-                --vpc-id $VPC_ID \
-                --query 'GroupId' --output text)
-              
-              # Allow inbound traffic on port 8080
-              aws ec2 authorize-security-group-ingress \
-                --group-id $SG_ID \
-                --protocol tcp \
-                --port 8080 \
-                --cidr 0.0.0.0/0
-              
-              # Allow all outbound traffic
-              aws ec2 authorize-security-group-egress \
-                --group-id $SG_ID \
-                --protocol -1 \
-                --cidr 0.0.0.0/0 2>/dev/null || true
-            fi
-            
-            # Register task definition first (using updated one with taskRoleArn)
-            aws ecs register-task-definition \
-              --cli-input-json file://updated-task-def.json
-            
-            # Create the service
-            aws ecs create-service \
-              --cluster ${{ env.ECS_CLUSTER }} \
-              --service-name ${{ env.ECS_SERVICE }} \
-              --task-definition documentportaltd \
-              --desired-count 1 \
-              --launch-type FARGATE \
-              --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_IDS],securityGroups=[$SG_ID],assignPublicIp=ENABLED}" \
-              --enable-execute-command
-            
-            echo "service_created=true" >> $GITHUB_OUTPUT
-          else
-            echo "Service exists: $SERVICE_EXISTS"
-            echo "service_created=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Deploy to ECS (Update existing service)
-        if: steps.check-service.outputs.service_created == 'false'
+      - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          task-definition: ${{ steps.update-task-def.outputs.updated_task_def }}
+          task-definition: ${{ steps.render-task.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
-
-      - name: Wait for new service to be stable
-        if: steps.check-service.outputs.service_created == 'true'
-        run: |
-          echo "Waiting for newly created service to become stable..."
-          aws ecs wait services-stable \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }}
-
       - name: Done!
         run: echo "Deployed to ECS Fargate Successfully"

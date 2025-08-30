@@ -2,7 +2,6 @@
   "family": "documentportaltd",
   "networkMode": "awsvpc",
   "executionRoleArn": "arn:aws:iam::637423312037:role/ecsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::637423312037:role/ecsTaskRole",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "1024",
   "memory": "8192",
@@ -10,10 +9,12 @@
     {
       "name": "document-portal-container",
       "image": "637423312037.dkr.ecr.us-east-1.amazonaws.com/documentportal",
+      "cpu": 1024,
       "essential": true,
       "portMappings": [
         {
           "containerPort": 8080,
+          "hostPort": 8080,
           "protocol": "tcp",
           "name": "document-portal-container-8080-tcp",
           "appProtocol": "http"
@@ -30,6 +31,7 @@
           "name": "DOC_PORTAL_API_KEYS",
           "valueFrom": "arn:aws:secretsmanager:us-east-1:637423312037:secret:doc_portal_api_keys-epQ2WO"
         }
+        
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
