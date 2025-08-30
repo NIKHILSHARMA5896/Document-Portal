@@ -28,13 +28,8 @@
       ],
       "secrets": [
         {
-          "name": "GROQ_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:637423312037:secret:doc_portal_api_keys-epQ2WO:GROQ_API_KEY"
-        },
-
-        {
-          "name": "OPENAI_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:637423312037:secret:doc_portal_api_keys-epQ2WO:OPENAI_API_KEY"
+          "name": "DOC_PORTAL_API_KEYS",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:637423312037:secret:doc_portal_api_keys-epQ2WO"
         }
         
       ],
