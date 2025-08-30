@@ -89,6 +89,52 @@ jobs:
       - name: Print Rendered Task
         run: cat ${{ steps.render-task.outputs.task-definition }}
 
+      - name: Create or update task role if needed
+        run: |
+          # Check if task role exists, create if not
+          TASK_ROLE_EXISTS=$(aws iam get-role --role-name ecsTaskRole --query 'Role.RoleName' --output text 2>/dev/null || echo "None")
+          
+          if [ "$TASK_ROLE_EXISTS" = "None" ]; then
+            echo "Creating ECS Task Role..."
+            # Create the task role
+            aws iam create-role \
+              --role-name ecsTaskRole \
+              --assume-role-policy-document '{
+                "Version": "2012-10-17",
+                "Statement": [
+                  {
+                    "Effect": "Allow",
+                    "Principal": {
+                      "Service": "ecs-tasks.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                  }
+                ]
+              }'
+            
+            # Attach basic ECS task permissions
+            aws iam attach-role-policy \
+              --role-name ecsTaskRole \
+              --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+            
+            # Wait for role to be available
+            sleep 10
+          fi
+
+      - name: Update task definition with task role
+        id: update-task-def
+        run: |
+          # Add taskRoleArn to the task definition
+          TASK_ROLE_ARN="arn:aws:iam::637423312037:role/ecsTaskRole"
+          
+          # Read the rendered task definition and add taskRoleArn
+          jq --arg taskRoleArn "$TASK_ROLE_ARN" '. + {taskRoleArn: $taskRoleArn}' \
+            ${{ steps.render-task.outputs.task-definition }} > updated-task-def.json
+          
+          echo "Updated task definition with taskRoleArn:"
+          cat updated-task-def.json
+          echo "updated_task_def=updated-task-def.json" >> $GITHUB_OUTPUT
+
       - name: Check if ECS Service exists and create if needed
         id: check-service
         run: |
@@ -133,9 +179,9 @@ jobs:
                 --cidr 0.0.0.0/0 2>/dev/null || true
             fi
             
-            # Register task definition first
+            # Register task definition first (using updated one with taskRoleArn)
             aws ecs register-task-definition \
-              --cli-input-json file://${{ steps.render-task.outputs.task-definition }}
+              --cli-input-json file://updated-task-def.json
             
             # Create the service
             aws ecs create-service \
@@ -157,7 +203,7 @@ jobs:
         if: steps.check-service.outputs.service_created == 'false'
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          task-definition: ${{ steps.render-task.outputs.task-definition }}
+          task-definition: ${{ steps.update-task-def.outputs.updated_task_def }}
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
