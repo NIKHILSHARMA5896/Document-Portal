@@ -8,7 +8,7 @@
   "containerDefinitions": [
     {
       "name": "document-portal-container",
-      "image": "637423312037.dkr.ecr.us-east-1.amazonaws.com/documentportal",
+      "image": "637423312037.dkr.ecr.ap-south-1.amazonaws.com/documentportal",
       "cpu": 1024,
       "essential": true,
       "portMappings": [
@@ -28,8 +28,8 @@
       ],
       "secrets": [
         {
-          "name": "DOC_PORTAL_API_KEYS",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:637423312037:secret:doc_portal_api_keys-epQ2WO"
+          "name": "API_KEYS",
+          "valueFrom": "arn:aws:secretsmanager:ap-south-1:637423312037:secret:API_KEYS-LKawny"
         }
         
       ],
@@ -37,7 +37,7 @@
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/documentportaltd",
-          "awslogs-region": "us-east-1",
+          "awslogs-region": "ap-south-1",
           "awslogs-stream-prefix": "ecs",
           "awslogs-create-group": "true"
         }
